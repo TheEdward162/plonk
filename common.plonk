@@ -1,0 +1,108 @@
+; R0 = GATES to enable
+CONFIG_CLOCK PROC
+; Registers
+
+! PLONK(1): ONE = 1, CR = "RCC_CR", CF = "RCC_CFGR"
+
+; reset clock bits 16 and 18 (HESON and HSEBYP)
+read CR
+	BIC $0, $0, #0b0101_00000000_00000000
+write
+
+; enable HSEON
+store "HSEON" ONE
+
+; Wait until HSERDY is stable
+alloc 2
+	LDR $0, =HSERDY
+
+HSE_NOT_READY
+	LDR $1, [$0]
+	TST $1, #1
+	BEQ HSE_NOT_READY
+free 2
+
+; set SCLK
+read CF
+	BIC $0, $0, #0b1111_0000
+write
+
+; set HCLK PPRE2
+read CF
+	BIC $0, $0, #0b111000_00000000
+write
+
+; set HCLK PPRE1
+read CF
+	BIC $0, $0, #0b111_00000000
+	ORR $0, $0, #0b10_00000000
+write
+
+; set PLL as 24MHz clock
+read CF
+	BIC $0, $0, #0b111111_00000000_00000000
+	ORR $0, $0, #0b0101_00000000_00000000
+write
+				
+; Enable PLLON
+store "PLLON" ONE
+
+; Wait until PLLRDY is stable
+alloc 2
+	LDR $0, =PLLRDY
+
+PLL_NOT_READY
+	LDR $1, [$0]
+	TST $1, #1
+	BEQ PLL_NOT_READY
+free 2
+
+; set PLL as clock
+read CF
+	BIC $0, $0, #0b11
+	ORR $0, $0, #0b10
+write
+
+; Link clock to gates
+read "RCC_APB2ENR"
+	ORR $0, $0, $A0
+write
+
+	BX LR
+	ENDP
+!!
+
+; R0 = GPIO register to configure
+; R1 = mask to zero
+; R2 = bits to set
+CONFIG_GPIO PROC
+! PLONK(3):
+
+read $A0
+	BIC $0, $0, $A1
+	ORR $0, $0, $A2
+write
+
+	BX LR
+	ENDP
+!!
+
+; R0 = number of outer iterations
+DELAY PROC
+! PLONK(1):
+
+alloc 1
+OUTER
+	MOV $0, #40000
+INNER
+	SUBS $0, $0, #1
+	BNE INNER
+
+; sub the user argument
+	SUBS $A0, $A0, #1
+	BNE OUTER
+free 1
+
+	BX LR
+	ENDP
+!!
