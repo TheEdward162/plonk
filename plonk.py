@@ -517,7 +517,7 @@ class PlonkFileState:
 
 	def process_call(self, rest: str):
 		"""
-		call LABEL [=ADDR|NUMBER|$N|$AN|$NAMED [...]]
+		call LABEL =ADDR|NUMBER|$N|$AN|$NAMED ...
 
 		call _ =ADDR ->
 			LDR R0, =ADDR
@@ -648,7 +648,7 @@ class PlonkFileState:
 
 	def process_alloc(self, rest: str):
 		"""
-		alloc [NAME [=ADDR|NUM|$N|$AN|$NAMED]]
+		alloc NAME =ADDR|NUM|$N|$AN|$NAMED
 		
 		Allocates a variable addressable with `$[0-9]+` and with an optional name syntax.
 		"""
@@ -695,7 +695,7 @@ class PlonkFileState:
 		"""
 		Allocates a new addressable variable and loads the value of `[=ADDR|$N|$AN|$NAMED]` into it.
 
-		read [=ADDR|$N|$AN|$NAMED]
+		read [=ADDR|$N|$AN|$NAMED] NAME
 
 		read [=ADDR] ->
 			LDR RI, =ADDR
@@ -704,10 +704,15 @@ class PlonkFileState:
 		read [$N|$AN|$NAMED]
 			LDR RV, [$N|$AN|$NAMED]
 		"""
-		argument_matches, argument = match_address_target(rest)
+		split = rest.split(" ")
+		argument_matches, argument = match_address_target(split[0])
 		if not argument_matches:
 			raise RuntimeError(f"Argument of read must match pattern `[[^]]+]`: {rest}")
 		
+		name = None
+		if len(split) > 1 and RE_NAMED_REGISTER.match(f"${split[1]}") is not None:
+			name = split[1]
+
 		code = ""
 
 		address = self.match_and_scope(
@@ -721,6 +726,7 @@ class PlonkFileState:
 			code += address.code
 
 		variable = self.context.allocate_variable()
+		variable.name = name
 		self.scoped_variables.push(variable)
 
 		code += code_line(f"LDR {variable.register}, [{address.register}]")

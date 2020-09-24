@@ -15,8 +15,8 @@ store [=HSEON] $ONE
 ; Wait until HSERDY is stable
 alloc HSE_ADDR =HSERDY
 HSE_NOT_READY
-	read [$HSE_ADDR]
-		ifeq $0 0 HSE_NOT_READY
+	read [$HSE_ADDR] HSE_READY
+		ifeq $HSE_READY 0 HSE_NOT_READY
 	discard
 free
 
@@ -48,8 +48,8 @@ store [=PLLON] $ONE
 ; Wait until PLLRDY is stable
 alloc PLL_ADDR =PLLRDY
 PLL_NOT_READY
-	read [$PLL_ADDR]
-		ifeq $0 0 PLL_NOT_READY
+	read [$PLL_ADDR] PLL_READY
+		ifeq $PLL_READY 0 PLL_NOT_READY
 	discard
 free
 
@@ -89,12 +89,12 @@ write
 DELAY PROC
 ! PLONK(1):
 
-alloc 1
+alloc
 ; inner should take 1 ms, that is 24000 cycles as 24MHz
 ; 11998 * 2 from INNER + 4 from OUTER = 24000
 OUTER
 	NOP ; pad
-	MOV $0, #11998
+	MOV $0, #2998 ; TODO: This value work in the simulator
 INNER
 	SUBS $0, $0, #1
 	BNE INNER
@@ -102,7 +102,7 @@ INNER
 ; sub the user argument
 	SUBS $A0, $A0, #1
 	BNE OUTER
-free 1
+free
 
 	BX LR
 	ENDP

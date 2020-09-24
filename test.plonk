@@ -72,12 +72,12 @@ free
 ! PLONK(2): ONE = 1, FOO = =FOO
 alloc
 
-	read [=ADDR]
-	MOV $1, #0b10
+	read [=ADDR] NAME
+	MOV $NAME, #0b10
 	write
 
-	read [$0]
-	MOV $1, $ONE
+	read [$0] FOO
+	MOV $FOO, $ONE
 	write
 
 	read [$A0]
