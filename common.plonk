@@ -2,69 +2,65 @@
 CONFIG_CLOCK PROC
 ; Registers
 
-! PLONK(1): ONE = 1, CR = "RCC_CR", CF = "RCC_CFGR"
+! PLONK(1): ONE = 1, CR = =RCC_CR, CF = =RCC_CFGR
 
 ; reset clock bits 16 and 18 (HESON and HSEBYP)
-read CR
+read [$CR]
 	BIC $0, $0, #0b0101_00000000_00000000
 write
 
 ; enable HSEON
-store "HSEON" ONE
+store [=HSEON] $ONE
 
 ; Wait until HSERDY is stable
-alloc 2
-	LDR $0, =HSERDY
-
+alloc HSE_ADDR =HSERDY
 HSE_NOT_READY
-	LDR $1, [$0]
-	TST $1, #1
-	BEQ HSE_NOT_READY
-free 2
+	read [$HSE_ADDR]
+		ifeq $0 0 HSE_NOT_READY
+	discard
+free
 
 ; set SCLK
-read CF
+read [$CF]
 	BIC $0, $0, #0b1111_0000
 write
 
 ; set HCLK PPRE2
-read CF
+read [$CF]
 	BIC $0, $0, #0b111000_00000000
 write
 
 ; set HCLK PPRE1
-read CF
+read [$CF]
 	BIC $0, $0, #0b111_00000000
-	ORR $0, $0, #0b10_00000000
+	ORR $0, $0, #0b100_00000000
 write
 
-; set PLL as 24MHz clock
-read CF
+; set PLLSRC and PLLMUL to x3 (as 24MHz clock)
+read [$CF]
 	BIC $0, $0, #0b111111_00000000_00000000
-	ORR $0, $0, #0b0101_00000000_00000000
+	ORR $0, $0, #0b000101_00000000_00000000
 write
 				
 ; Enable PLLON
-store "PLLON" ONE
+store [=PLLON] $ONE
 
 ; Wait until PLLRDY is stable
-alloc 2
-	LDR $0, =PLLRDY
-
+alloc PLL_ADDR =PLLRDY
 PLL_NOT_READY
-	LDR $1, [$0]
-	TST $1, #1
-	BEQ PLL_NOT_READY
-free 2
+	read [$PLL_ADDR]
+		ifeq $0 0 PLL_NOT_READY
+	discard
+free
 
 ; set PLL as clock
-read CF
+read [$CF]
 	BIC $0, $0, #0b11
 	ORR $0, $0, #0b10
 write
 
 ; Link clock to gates
-read "RCC_APB2ENR"
+read [=RCC_APB2ENR]
 	ORR $0, $0, $A0
 write
 
@@ -78,7 +74,7 @@ write
 CONFIG_GPIO PROC
 ! PLONK(3):
 
-read $A0
+read [$A0]
 	BIC $0, $0, $A1
 	ORR $0, $0, $A2
 write
@@ -88,12 +84,17 @@ write
 !!
 
 ; R0 = number of outer iterations
+; The clock is set to 24MHz - 24000000 operations per second
+; Delay waits for 1 ms * R0
 DELAY PROC
 ! PLONK(1):
 
 alloc 1
+; inner should take 1 ms, that is 24000 cycles as 24MHz
+; 11998 * 2 from INNER + 4 from OUTER = 24000
 OUTER
-	MOV $0, #40000
+	NOP ; pad
+	MOV $0, #11998
 INNER
 	SUBS $0, $0, #1
 	BNE INNER

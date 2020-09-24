@@ -1,0 +1,96 @@
+; alloc/free
+! PLONK(2): ONE = 1, FOO = =FOO
+
+alloc ALLOCATED
+	MOV $ALLOCATED, #0x1
+free
+
+alloc _SOME_NAME =FOO
+alloc
+	MOV $0, #0x2
+	MOV $1, #0x3
+free 2
+
+alloc ONE 2
+	MOV $ONE, #0x3
+free
+
+	MOV $ONE, #0x3
+!!
+
+; store
+! PLONK(2): ONE = 1, FOO = =FOO
+
+alloc ALLOCATED
+	store [=ADDR] 2
+
+	store [$ALLOCATED] $A0
+
+	store [$ONE] $ALLOCATED
+
+	store [$0] $FOO
+free
+!!
+
+; call
+! PLONK(2): ONE = 1, FOO = =FOO
+alloc
+
+; TODO: WRONG, DONT USE call LABEL =ADDR R7 R0 R2
+;	PUSH { R0, R1, R2 }
+;
+;	LDR R0, =ADDR
+;	MOV R1, R7
+;	MOV R2, R0 ; TODO: WRONG
+;	MOV R3, R2 ; TODO: Also WRONG
+;	BL LABEL
+;	POP { R2, R1, R0 }
+
+	call BABEL
+
+	call CABEL 7
+free
+!!
+
+; ifeq
+! PLONK(2): ONE = 1, FOO = =FOO
+alloc
+
+	ifeq =ADDR $0 LABEL
+
+	ifeq $0 $ONE BABEL
+
+	ifeq $FOO $A0 CABEL
+
+	ifeq $ONE =ADDR DABEL
+
+	ifeq $A0 0b11 EABEL
+free
+!!
+
+; read/write/discard
+! PLONK(2): ONE = 1, FOO = =FOO
+alloc
+
+	read [=ADDR]
+	MOV $1, #0b10
+	write
+
+	read [$0]
+	MOV $1, $ONE
+	write
+
+	read [$A0]
+	MOV $1, $A0
+	write
+
+	read [=ADDR]
+	TST $1, #0b100
+	discard
+
+	read [$FOO]
+	MOV $1, #0x1
+	write
+
+free
+!!

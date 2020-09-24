@@ -7,67 +7,65 @@ CONFIG_CLOCK PROC
 	LDR R5, =RCC_CFGR
 
 ; reset clock bits 16 and 18 (HESON and HSEBYP)
-	LDR R4, [R6]
-	BIC R4, R4, #0x50000
-	STR R4, [R6]
+	LDR R1, [R6]
+	BIC R1, R1, #0x50000
+	STR R1, [R6]
 
 ; enable HSEON
-	LDR R4, =HSEON
-	STR R7, [R4]
+	LDR R1, =HSEON
+	STR R7, [R1]
 
 ; Wait until HSERDY is stable
-	LDR R4, =HSERDY
-
+	LDR R1, =HSERDY
 HSE_NOT_READY
-	LDR R3, [R4]
-	TST R3, #1
+	LDR R2, [R1]
+	CMP R1, #0x0
 	BEQ HSE_NOT_READY
 
 ; set SCLK
-	LDR R4, [R5]
-	BIC R4, R4, #0xF0
-	STR R4, [R5]
+	LDR R1, [R5]
+	BIC R1, R1, #0xF0
+	STR R1, [R5]
 
 ; set HCLK PPRE2
-	LDR R4, [R5]
-	BIC R4, R4, #0x3800
-	STR R4, [R5]
+	LDR R1, [R5]
+	BIC R1, R1, #0x3800
+	STR R1, [R5]
 
 ; set HCLK PPRE1
-	LDR R4, [R5]
-	BIC R4, R4, #0x700
-	ORR R4, R4, #0x200
-	STR R4, [R5]
+	LDR R1, [R5]
+	BIC R1, R1, #0x700
+	ORR R1, R1, #0x400
+	STR R1, [R5]
 
-; set PLL as 24MHz clock
-	LDR R4, [R5]
-	BIC R4, R4, #0x3F0000
-	ORR R4, R4, #0x50000
-	STR R4, [R5]
+; set PLLSRC and PLLMUL to x3 (as 24MHz clock)
+	LDR R1, [R5]
+	BIC R1, R1, #0x3F0000
+	ORR R1, R1, #0x50000
+	STR R1, [R5]
 				
 ; Enable PLLON
-	LDR R4, =PLLON
-	STR R7, [R4]
+	LDR R1, =PLLON
+	STR R7, [R1]
 
 ; Wait until PLLRDY is stable
-	LDR R4, =PLLRDY
-
+	LDR R1, =PLLRDY
 PLL_NOT_READY
-	LDR R3, [R4]
-	TST R3, #1
+	LDR R2, [R1]
+	CMP R1, #0x0
 	BEQ PLL_NOT_READY
 
 ; set PLL as clock
-	LDR R4, [R5]
-	BIC R4, R4, #0x3
-	ORR R4, R4, #0x2
-	STR R4, [R5]
+	LDR R1, [R5]
+	BIC R1, R1, #0x3
+	ORR R1, R1, #0x2
+	STR R1, [R5]
 
 ; Link clock to gates
-	LDR R4, =RCC_APB2ENR
-	LDR R3, [R4]
-	ORR R3, R3, R0
-	STR R3, [R4]
+	LDR R1, =RCC_APB2ENR
+	LDR R2, [R1]
+	ORR R2, R2, R0
+	STR R2, [R1]
 
 	BX LR
 	ENDP
@@ -77,21 +75,26 @@ PLL_NOT_READY
 ; R2 = bits to set
 CONFIG_GPIO PROC
 
-	LDR R7, [R0]
-	BIC R7, R7, R1
-	ORR R7, R7, R2
-	STR R7, [R0]
+	LDR R3, [R0]
+	BIC R3, R3, R1
+	ORR R3, R3, R2
+	STR R3, [R0]
 
 	BX LR
 	ENDP
 
 ; R0 = number of outer iterations
+; The clock is set to 24MHz - 24000000 operations per second
+; Delay waits for 1 ms * R0
 DELAY PROC
 
+; inner should take 1 ms, that is 24000 cycles as 24MHz
+; 11998 * 2 from INNER + 4 from OUTER = 24000
 OUTER
-	MOV R7, #40000
+	NOP ; pad
+	MOV R1, #11998
 INNER
-	SUBS R7, R7, #1
+	SUBS R1, R1, #1
 	BNE INNER
 
 ; sub the user argument

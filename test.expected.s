@@ -1,0 +1,96 @@
+; alloc/free
+	MOV R7, #0x1
+	LDR R6, =FOO
+
+	MOV R2, #0x1
+
+	LDR R2, =FOO
+	MOV R2, #0x2
+	MOV R3, #0x3
+
+	MOV R2, #0x2
+	MOV R2, #0x3
+
+	MOV R7, #0x3
+
+; store
+	MOV R7, #0x1
+	LDR R6, =FOO
+
+	LDR R3, =ADDR
+	MOV R4, #0x2
+	STR R4, [R3]
+
+	STR R0, [R2]
+
+	STR R2, [R7]
+
+	STR R6, [R2]
+
+; call
+	MOV R7, #0x1
+	LDR R6, =FOO
+
+; TODO: WRONG, DONT USE call LABEL =ADDR R7 R0 R2
+;	PUSH { R0, R1, R2 }
+;
+;	LDR R0, =ADDR
+;	MOV R1, R7
+;	MOV R2, R0 ; TODO: WRONG
+;	MOV R3, R2 ; TODO: Also WRONG
+;	BL LABEL
+;	POP { R2, R1, R0 }
+
+	BL BABEL
+
+	PUSH { R0 }
+	MOV R0, #0x7
+	BL CABEL
+	POP { R0 }
+
+; ifeq
+	MOV R7, #0x1
+	LDR R6, =FOO
+
+	LDR R3, =ADDR
+	CMP R3, R2
+	BEQ LABEL
+
+	CMP R2, R7
+	BEQ BABEL
+
+	CMP R6, R0
+	BEQ CABEL
+
+	LDR R3, =ADDR
+	CMP R7, R3
+	BEQ DABEL
+
+	CMP R0, #0x3
+	BEQ EABEL
+
+; read/write/discard
+	MOV R7, #0x1
+	LDR R6, =FOO
+
+	LDR R3, =ADDR
+	LDR R4, [R3]
+	MOV R4, #0x2
+	STR R4, [R3]
+
+	LDR R3, [R2]
+	MOV R3, R7
+	STR R3, [R2]
+
+	LDR R3, [R0]
+	MOV R3, R0
+	STR R3, [R0]
+
+	LDR R3, =ADDR
+	LDR R4, [R3]
+	TST R4, #0x4
+
+	LDR R3, [R6]
+	MOV R3, #0x1
+	STR R3, [R6]
+
