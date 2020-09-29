@@ -29,6 +29,8 @@ alloc ALLOCATED
 	store [$ONE] $ALLOCATED
 
 	store [$0] $FOO
+
+	store [R0] R1
 free
 !!
 
@@ -49,10 +51,12 @@ alloc
 	call BABEL
 
 	call CABEL 7
+
+	calln DABEL 8
 free
 !!
 
-; ifeq
+; if variants
 ! PLONK(2): ONE = 1, FOO = =FOO
 alloc
 
@@ -64,7 +68,11 @@ alloc
 
 	ifeq $ONE =ADDR DABEL
 
-	ifeq $A0 0b11 EABEL
+	ifeq $A0 R0 EABEL
+
+	ifneq R0 0b11 FABEL
+
+	ifgt =ADDR $0 GABEL
 free
 !!
 
@@ -90,6 +98,10 @@ alloc
 
 	read [$FOO]
 	MOV $1, #0x1
+	write
+
+	read [R0]
+	MOV $1, R1
 	write
 
 free

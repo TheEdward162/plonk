@@ -90,11 +90,16 @@ DELAY PROC
 ! PLONK(1):
 
 alloc
+	PUSH { $0 }
+
 ; inner should take 1 ms, that is 24000 cycles as 24MHz
 ; 11998 * 2 from INNER + 4 from OUTER = 24000
+; Of course that doesn't work
 OUTER
-	NOP ; pad
-	MOV $0, #2998 ; TODO: This value work in the simulator
+	NOP
+	; 2998 works in the simulator
+	; 9000 works on the board
+	MOV $0, #9000
 INNER
 	SUBS $0, $0, #1
 	BNE INNER
@@ -102,6 +107,8 @@ INNER
 ; sub the user argument
 	SUBS $A0, $A0, #1
 	BNE OUTER
+	
+	POP { $0 }
 free
 
 	BX LR

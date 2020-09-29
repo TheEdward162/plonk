@@ -27,6 +27,8 @@
 
 	STR R6, [R2]
 
+	STR R1, [R0]
+
 ; call
 	MOV R7, #0x1
 	LDR R6, =FOO
@@ -48,7 +50,14 @@
 	BL CABEL
 	POP { R0 }
 
-; ifeq
+	PUSH { R0 }
+	MOV R0, #0x8
+	PUSH { LR }
+	BL DABEL
+	POP { LR }
+	POP { R0 }
+
+; if variants
 	MOV R7, #0x1
 	LDR R6, =FOO
 
@@ -66,8 +75,15 @@
 	CMP R7, R3
 	BEQ DABEL
 
-	CMP R0, #0x3
+	CMP R0, R0
 	BEQ EABEL
+
+	CMP R0, #0x3
+	BNE FABEL
+
+	LDR R3, =ADDR
+	CMP R3, R2
+	BGT GABEL
 
 ; read/write/discard
 	MOV R7, #0x1
@@ -93,4 +109,8 @@
 	LDR R3, [R6]
 	MOV R3, #0x1
 	STR R3, [R6]
+
+	LDR R3, [R0]
+	MOV R3, R1
+	STR R3, [R0]
 

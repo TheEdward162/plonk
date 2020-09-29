@@ -88,11 +88,16 @@ CONFIG_GPIO PROC
 ; Delay waits for 1 ms * R0
 DELAY PROC
 
+	PUSH { R1 }
+
 ; inner should take 1 ms, that is 24000 cycles as 24MHz
 ; 11998 * 2 from INNER + 4 from OUTER = 24000
+; Of course that doesn't work
 OUTER
-	NOP ; pad
-	MOV R1, #11998
+	NOP
+	; 2998 works in the simulator
+	; 9000 works on the board
+	MOV R1, #9000
 INNER
 	SUBS R1, R1, #1
 	BNE INNER
@@ -100,6 +105,8 @@ INNER
 ; sub the user argument
 	SUBS R0, R0, #1
 	BNE OUTER
+	
+	POP { R1 }
 
 	BX LR
 	ENDP

@@ -12,11 +12,14 @@ LOW_REGISTERS = ["R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7"]
 HIGH_REGISTERS = ["R8", "R9", "R10", "R11", "R12"]
 # TODO: Only allow high registers if we run out of low registers
 ALL_REGISTERS = LOW_REGISTERS
+RESERVED_REGISTERS = ALL_REGISTERS[0:1]
 
 RE_PLONK_BEGIN = re.compile("^!\s+PLONK\(([0-9]+)\):")
 RE_PLONK_NAMED = re.compile("\s+([a-zA-Z_][a-zA-Z_0-9]*)\s+=\s+([^,\s]+)(,|$)")
 RE_PLONK_END = re.compile("^!!$")
 RE_PLONK_INSERT = re.compile("^!\s+INSERT\s+(.+)$")
+
+RE_ASM_COMMENT = re.compile(";.*$")
 
 RE_ADDRESS_TARGET = re.compile("\[([^]]+)\]")
 def match_address_target(value: str) -> Tuple[bool, str]:
@@ -65,6 +68,16 @@ def match_variable_register(value: str) -> Tuple[bool, int]:
 
 	if match is not None:
 		return True, int(match.group(1))
+	
+	return False, None
+
+RE_RAW_REGISTER = re.compile("R([0-9]|1[0-2])")
+def match_raw_register(value: str) -> Tuple[bool, str]:
+	"""Matches R[0-9]|1[0-2]"""
+	match = RE_RAW_REGISTER.match(value)
+
+	if match is not None:
+		return True, match.group(0)
 	
 	return False, None
 
@@ -173,7 +186,8 @@ class PlonkRegisterContext:
 			)
 		
 		for register in registers:
-			self.variable_registers[register] = { "free": True } 
+			if register not in RESERVED_REGISTERS:
+				self.variable_registers[register] = { "free": True }
 	
 	def __str__(self):
 		return f"PlonkRegisterContext(named = {self.named_registers}, args = {self.argument_registers}, variables = {self.variable_registers})"
@@ -207,6 +221,9 @@ class PlonkRegisterContext:
 		raise RuntimeError(f"Could not allocate register: {self}")
 
 	def check_register(self, register: str):
+		if register in RESERVED_REGISTERS:
+			return True
+
 		if not register in self.variable_registers:
 			return False
 		
@@ -335,7 +352,8 @@ class PlonkFileState:
 		return line
 	
 	def process_line_plonking(self, line: str):
-		stripped = line.strip()
+		# strip comments and whitespace
+		stripped = RE_ASM_COMMENT.sub("", line).strip()
 		# ignore empty lines
 		if stripped == '':
 			return line
@@ -349,10 +367,18 @@ class PlonkFileState:
 		# self-contained
 		if word == "store":
 			return self.process_store(rest)
+		
 		if word == "call":
 			return self.process_call(rest)
+		elif word == "calln":
+			return self.process_call(rest, nested = True)
+
 		if word == "ifeq":
-			return self.process_ifeq(rest)
+			return self.process_if(rest)
+		elif word == "ifneq":
+			return self.process_if(rest, check_instruction = "BNE")
+		elif word == "ifgt":
+			return self.process_if(rest, check_instruction = "BGT")
 
 		# scoping
 		if word == "read":
@@ -446,6 +472,13 @@ class PlonkFileState:
 		
 		return None
 
+	def match_raw_register(self, value: str) -> PlonkVariable:
+		matches, register = match_raw_register(value)
+		if matches:
+			return PlonkVariable(register, register)
+
+		return None
+
 	def match_number(self, value: str) -> PlonkVariable:
 		matches, number = match_number(value)
 		if matches:
@@ -463,21 +496,21 @@ class PlonkFileState:
 
 	def process_store(self, rest: str):
 		"""
-		store [=ADDR|$N|$AN|$NAMED] NUM|$N|$AN|$NAMED
+		store [=ADDR|$N|$AN|$NAMED|RAW] NUM|$N|$AN|$NAMED|RAW
 
 		store [=ADDR] _ ->
 			LDR RI, =ADDR
 			STR _ ,[RI]
 		
-		store [$N|$AN|$NAMED] _ ->
-			STR _, [$N|$AN|$NAMED]
+		store [$N|$AN|$NAMED|RAW] _ ->
+			STR _, [$N|$AN|$NAMED|RAW]
 		
 		store _ NUM ->
 			MOV RI, #NUM
 			STR RI, _
 		
-		store _ $N|$AN|$NAMED ->
-			STR $N|$AN|$NAMED, _
+		store _ $N|$AN|$NAMED|RAW ->
+			STR $N|$AN|$NAMED|RAW, _
 		"""
 		split = rest.split(" ")
 		target_argument_matches, target_argument = match_address_target(split[0])
@@ -492,18 +525,20 @@ class PlonkFileState:
 			self.match_address_constant,
 			self.match_argument_register,
 			self.match_variable_register,
-			self.match_named_register
+			self.match_named_register,
+			self.match_raw_register
 		)
+		if target.code is not None:
+			code += target.code
+
 		source = self.match_and_scope(
 			source_argument,
 			self.match_number,
 			self.match_argument_register,
 			self.match_variable_register,
-			self.match_named_register
+			self.match_named_register,
+			self.match_raw_register
 		)
-
-		if target.code is not None:
-			code += target.code
 		if source.code is not None:
 			code += source.code
 
@@ -515,9 +550,9 @@ class PlonkFileState:
 
 		return code
 
-	def process_call(self, rest: str):
+	def process_call(self, rest: str, nested = False):
 		"""
-		call LABEL =ADDR|NUMBER|$N|$AN|$NAMED ...
+		call|calln LABEL =ADDR|NUMBER|$N|$AN|$NAMED|RAW ...
 
 		call _ =ADDR ->
 			LDR R0, =ADDR
@@ -528,8 +563,14 @@ class PlonkFileState:
 			BL _
 
 		call _ $N|$AN|$NAMED ->
-			MOV R0, $N|$AN|$NAMED
+			MOV R0, $N|$AN|$NAMED|RAW
 			BL _
+		
+		calln _ _ ->
+			_
+			PUSH { LR }
+			BL _
+			POP { LR }
 		"""
 		split = rest.split(" ")
 		label = split[0]
@@ -562,10 +603,15 @@ class PlonkFileState:
 				self.match_address_constant,
 				self.match_argument_register,
 				self.match_variable_register,
-				self.match_named_register
+				self.match_named_register,
+				self.match_raw_register
 			)
 		
+		if nested:
+			code += code_line("PUSH { LR }")
 		code += code_line(f"BL {label}")
+		if nested:
+			code += code_line("POP { LR }")
 
 		if len(overlapping_registers) > 0:
 			regs = ", ".join(reversed(overlapping_registers))
@@ -573,17 +619,17 @@ class PlonkFileState:
 
 		return code
 
-	def process_ifeq(self, rest: str):
+	def process_if(self, rest: str, check_instruction = "BEQ"):
 		"""
-		ifeq =ADDR|$N|$AN|$NAMED =ADDR|NUM|$N|$AN|$NAMED LABEL
+		ifeq|ifneq =ADDR|$N|$AN|$NAMED|RAW =ADDR|NUM|$N|$AN|$NAMED|RAW LABEL
 
 		ifeq =ADDR _ _ ->
 			LDR RI, =ADDR
 			CMP RI, _
 			BEQ _
 		
-		ifeq $N|$AN|$NAMED _ _ ->
-			CMP $N|$AN|$NAMED _
+		ifeq $N|$AN|$NAMED|RAW _ _ ->
+			CMP $N|$AN|$NAMED|RAW _
 			BEQ _
 		
 		ifeq _ =ADDR _ ->
@@ -595,9 +641,18 @@ class PlonkFileState:
 			CMP _, #NUM
 			BEQ _
 		
-		ifeq _ $N|$AN|$NAMED _ ->
-			CMP _, $N|$AN|$NAMED
+		ifeq _ $N|$AN|$NAMED|RAW _ ->
+			CMP _, $N|$AN|$NAMED|RAW
 			BEQ _
+
+		ifeq _, _, LABEL ->
+			BEQ LABEL
+
+		ifneq _, _, LABEL ->
+			BNE LABEL
+
+		ifgt _, _, LABEL ->
+			BGT LABEL
 		"""
 		split = rest.split(" ")
 		left_argument = split[0]
@@ -611,7 +666,8 @@ class PlonkFileState:
 			self.match_address_constant,
 			self.match_argument_register,
 			self.match_variable_register,
-			self.match_named_register
+			self.match_named_register,
+			self.match_raw_register
 		)
 		if left.code is not None:
 			code += left.code
@@ -621,7 +677,8 @@ class PlonkFileState:
 			self.match_address_constant,
 			self.match_argument_register,
 			self.match_variable_register,
-			self.match_named_register
+			self.match_named_register,
+			self.match_raw_register
 		)
 		if right_variable is not None:
 			if right_variable.code is not None:
@@ -637,7 +694,7 @@ class PlonkFileState:
 			
 			code += code_line(f"CMP {left.register}, #0x{number:X}")
 
-		code += code_line(f"BEQ {label}")
+		code += code_line(f"{check_instruction} {label}")
 
 		# pop left
 		self.scoped_internal.pop(self.context)
@@ -648,7 +705,7 @@ class PlonkFileState:
 
 	def process_alloc(self, rest: str):
 		"""
-		alloc NAME =ADDR|NUM|$N|$AN|$NAMED
+		alloc NAME =ADDR|NUM|$N|$AN|$NAMED|RAW
 		
 		Allocates a variable addressable with `$[0-9]+` and with an optional name syntax.
 		"""
@@ -675,7 +732,8 @@ class PlonkFileState:
 				self.match_number,
 				self.match_argument_register,
 				self.match_variable_register,
-				self.match_named_register
+				self.match_named_register,
+				self.match_raw_register
 			)
 
 		return code
@@ -693,16 +751,16 @@ class PlonkFileState:
 
 	def process_read(self, rest: str):
 		"""
-		Allocates a new addressable variable and loads the value of `[=ADDR|$N|$AN|$NAMED]` into it.
+		Allocates a new addressable variable and loads the value of `[=ADDR|$N|$AN|$NAMED|RAW]` into it.
 
-		read [=ADDR|$N|$AN|$NAMED] NAME
+		read [=ADDR|$N|$AN|$NAMED|RAW] NAME
 
 		read [=ADDR] ->
 			LDR RI, =ADDR
 			LDR RV, [RI]
 		
-		read [$N|$AN|$NAMED]
-			LDR RV, [$N|$AN|$NAMED]
+		read [$N|$AN|$NAMED|RAW]
+			LDR RV, [$N|$AN|$NAMED|RAW]
 		"""
 		split = rest.split(" ")
 		argument_matches, argument = match_address_target(split[0])
@@ -720,7 +778,8 @@ class PlonkFileState:
 			self.match_address_constant,
 			self.match_argument_register,
 			self.match_variable_register,
-			self.match_named_register
+			self.match_named_register,
+			self.match_raw_register
 		)
 		if address.code is not None:
 			code += address.code
@@ -742,8 +801,8 @@ class PlonkFileState:
 		write -> ; with previous `read =ADDR`
 			STR RV, [RI]
 		
-		write -> ; with previous `read $N|$AN|$NAMED`
-			STR RV, [$N|$AN|$NAMED]
+		write -> ; with previous `read $N|$AN|$NAMED|RAW`
+			STR RV, [$N|$AN|$NAMED|RAW]
 		"""
 		reg = self.scoped_variables.pop(self.context)
 		addr = self.scoped_internal.pop(self.context)
