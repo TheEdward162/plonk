@@ -98,8 +98,8 @@ alloc
 OUTER
 	NOP
 	; 2998 works in the simulator
-	; 9000 works on the board
-	MOV $0, #9000
+	; 7500 works on the board
+	MOV $0, #7500
 INNER
 	SUBS $0, $0, #1
 	BNE INNER

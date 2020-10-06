@@ -1,5 +1,5 @@
 ; alloc/free
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =FOO
 
 	MOV R2, #0x1
@@ -8,17 +8,17 @@
 	MOV R2, #0x2
 	MOV R3, #0x3
 
-	MOV R2, #0x2
+	LDR R2, =0x2
 	MOV R2, #0x3
 
 	MOV R7, #0x3
 
 ; store
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =FOO
 
 	LDR R3, =ADDR
-	MOV R4, #0x2
+	LDR R4, =0x2
 	STR R4, [R3]
 
 	STR R0, [R2]
@@ -30,7 +30,7 @@
 	STR R1, [R0]
 
 ; call
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =FOO
 
 ; TODO: WRONG, DONT USE call LABEL =ADDR R7 R0 R2
@@ -46,19 +46,19 @@
 	BL BABEL
 
 	PUSH { R0 }
-	MOV R0, #0x7
+	LDR R0, =0x7
 	BL CABEL
 	POP { R0 }
 
 	PUSH { R0 }
-	MOV R0, #0x8
+	LDR R0, =0x8
 	PUSH { LR }
 	BL DABEL
 	POP { LR }
 	POP { R0 }
 
 ; if variants
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =FOO
 
 	LDR R3, =ADDR
@@ -85,8 +85,14 @@
 	CMP R3, R2
 	BGT GABEL
 
+	TST R0, #0xB
+	BNE HABEL
+
+	TST R0, #0xB
+	BEQ IABEL
+
 ; read/write/discard
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =FOO
 
 	LDR R3, =ADDR

@@ -19,7 +19,7 @@ RE_PLONK_NAMED = re.compile("\s+([a-zA-Z_][a-zA-Z_0-9]*)\s+=\s+([^,\s]+)(,|$)")
 RE_PLONK_END = re.compile("^!!$")
 RE_PLONK_INSERT = re.compile("^!\s+INSERT\s+(.+)$")
 
-RE_ASM_COMMENT = re.compile(";.*$")
+RE_ASM_COMMENT = re.compile("[;@].*$")
 
 RE_ADDRESS_TARGET = re.compile("\[([^]]+)\]")
 def match_address_target(value: str) -> Tuple[bool, str]:
@@ -175,7 +175,7 @@ class PlonkRegisterContext:
 			if type(val) is str:
 				code += code_line(f"LDR {reg}, ={val}")
 			elif type(val) is int:
-				code += code_line(f"MOV {reg}, #0x{val:X}")
+				code += code_line(f"LDR {reg}, =0x{val:X}")
 			else:
 				raise RuntimeError(f"Invalid constant value type {val}")
 
@@ -302,14 +302,15 @@ class PlonkFileState:
 				key = named_match.group(1)
 				value = named_match.group(2)
 				
-				matches, matched_value = match_address_constant(value)
+				matches, address = match_address_constant(value)
 				if not matches:
-					try:
-						value = int(value)
-					except:
+					matches, number = match_number(value)
+					if not matches:
 						raise RuntimeError(f"Could not parse {value} as number nor address constant")
+					else:
+						value = number	
 				else:
-					value = matched_value
+					value = address
 
 				named_registers[key] = value
 			
@@ -376,9 +377,13 @@ class PlonkFileState:
 		if word == "ifeq":
 			return self.process_if(rest)
 		elif word == "ifneq":
-			return self.process_if(rest, check_instruction = "BNE")
+			return self.process_if(rest, branch = "BNE")
 		elif word == "ifgt":
-			return self.process_if(rest, check_instruction = "BGT")
+			return self.process_if(rest, branch = "BGT")
+		elif word == "iftestone":
+			return self.process_if(rest, test = "TST", branch = "BNE")
+		elif word == "iftestzero":
+			return self.process_if(rest, test = "TST", branch = "BEQ")
 
 		# scoping
 		if word == "read":
@@ -486,7 +491,7 @@ class PlonkFileState:
 			return PlonkVariable(
 				f"#0x{number:X}",
 				var.register,
-				code_line(f"MOV {var.register}, #0x{number:X}"),
+				code_line(f"LDR {var.register}, =0x{number:X}"),
 				needs_free = True
 			)
 		
@@ -619,9 +624,9 @@ class PlonkFileState:
 
 		return code
 
-	def process_if(self, rest: str, check_instruction = "BEQ"):
+	def process_if(self, rest: str, test = "CMP", branch = "BEQ"):
 		"""
-		ifeq|ifneq =ADDR|$N|$AN|$NAMED|RAW =ADDR|NUM|$N|$AN|$NAMED|RAW LABEL
+		ifeq|ifneq|ifgt|iftestone|iftestzero =ADDR|$N|$AN|$NAMED|RAW =ADDR|NUM|$N|$AN|$NAMED|RAW LABEL
 
 		ifeq =ADDR _ _ ->
 			LDR RI, =ADDR
@@ -646,13 +651,24 @@ class PlonkFileState:
 			BEQ _
 
 		ifeq _, _, LABEL ->
+			CMP _, _
 			BEQ LABEL
 
 		ifneq _, _, LABEL ->
+			CMP _, _
 			BNE LABEL
 
 		ifgt _, _, LABEL ->
+			CMP _, _
 			BGT LABEL
+
+		iftestone _, _, LABEL ->
+			TST _, _
+			BNZ LABEL
+
+		iftestzero _, _, LABEL ->
+			TST _, _
+			BEQ LABEL
 		"""
 		split = rest.split(" ")
 		left_argument = split[0]
@@ -684,7 +700,7 @@ class PlonkFileState:
 			if right_variable.code is not None:
 				code += right_variable.code
 
-			code += code_line(f"CMP {left.register}, {right_variable.register}")
+			code += code_line(f"{test} {left.register}, {right_variable.register}")
 			
 			self.scoped_internal.pop(self.context)
 		else:
@@ -692,9 +708,9 @@ class PlonkFileState:
 			if not matches:
 				raise RuntimeError(f"Argument {right_argument} does not match any known right side")
 			
-			code += code_line(f"CMP {left.register}, #0x{number:X}")
+			code += code_line(f"{test} {left.register}, #0x{number:X}")
 
-		code += code_line(f"{check_instruction} {label}")
+		code += code_line(f"{branch} {label}")
 
 		# pop left
 		self.scoped_internal.pop(self.context)

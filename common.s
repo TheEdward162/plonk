@@ -2,7 +2,7 @@
 CONFIG_CLOCK PROC
 ; Registers
 
-	MOV R7, #0x1
+	LDR R7, =0x1
 	LDR R6, =RCC_CR
 	LDR R5, =RCC_CFGR
 
@@ -96,8 +96,8 @@ DELAY PROC
 OUTER
 	NOP
 	; 2998 works in the simulator
-	; 9000 works on the board
-	MOV R1, #9000
+	; 7500 works on the board
+	MOV R1, #7500
 INNER
 	SUBS R1, R1, #1
 	BNE INNER

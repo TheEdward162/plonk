@@ -73,6 +73,10 @@ alloc
 	ifneq R0 0b11 FABEL
 
 	ifgt =ADDR $0 GABEL
+
+	iftestone $A0 11 HABEL
+
+	iftestzero $A0 11 IABEL
 free
 !!
 
